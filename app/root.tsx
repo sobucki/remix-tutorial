@@ -1,4 +1,9 @@
-import { LinksFunction, json, redirect } from "@remix-run/node";
+import {
+  LinksFunction,
+  LoaderFunctionArgs,
+  json,
+  redirect,
+} from "@remix-run/node";
 
 import {
   Form,
@@ -10,18 +15,23 @@ import {
   ScrollRestoration,
   useLoaderData,
   useNavigation,
+  useSubmit,
 } from "@remix-run/react";
 
 import appStylesHref from "./app.css?url";
 import { createEmptyContact, getContacts } from "./data";
+import { useEffect } from "react";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: appStylesHref },
 ];
 
-export const loader = async () => {
-  const contacts = await getContacts();
-  return json({ contacts });
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const q = url.searchParams.get("q");
+  const contacts = await getContacts(q);
+
+  return json({ contacts, q });
 };
 
 export const action = async () => {
@@ -30,8 +40,20 @@ export const action = async () => {
 };
 
 export default function App() {
-  const { contacts } = useLoaderData<typeof loader>();
+  const { contacts, q } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const searching =
+    navigation.location &&
+    new URLSearchParams(navigation.location.search).has("q");
+
+  useEffect(() => {
+    const searchField = document.getElementById("q");
+    if (searchField instanceof HTMLInputElement) {
+      searchField.value = q || "";
+    }
+  }, [q]);
+
   return (
     <html lang="en">
       <head>
@@ -47,12 +69,20 @@ export default function App() {
             <Form id="search-form" role="search">
               <input
                 id="q"
+                className={searching ? "loading" : ""}
+                defaultValue={q || ""}
                 aria-label="Search contacts"
                 placeholder="Search"
                 type="search"
                 name="q"
+                onChange={(event) => {
+                  const isFirstSearch = q === null;
+                  submit(event.currentTarget.form, {
+                    replace: !isFirstSearch,
+                  });
+                }}
               />
-              <div id="search-spinner" aria-hidden hidden={true} />
+              <div id="search-spinner" aria-hidden hidden={!searching} />
             </Form>
             <Form method="post">
               <button type="submit">New</button>
